@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sequential Presentation Timer</title>
+    <style>
+        :root {
+            --primary-color: #0056b3;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #6c757d;
+            --success: #28a745;
+            --skip-color: #dc3545;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .header {
+            text-align: center;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            position: sticky;
+            top: 10px;
+            z-index: 100;
+        }
+
+        #current-task {
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        #timer-display {
+            font-size: 5rem;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            margin: 5px 0;
+            color: var(--primary-color);
+            line-height: 1;
+        }
+
+        /* Overall Progress Bar Styles */
+        .overall-progress-wrapper {
+            margin-top: 20px;
+            padding: 0 10%;
+        }
+
+        .overall-progress-container {
+            width: 100%;
+            height: 12px;
+            background-color: #e9ecef;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .overall-progress-fill {
+            height: 100%;
+            background-color: var(--success);
+            width: 0%;
+            transition: width 1s linear;
+        }
+
+        #overall-percentage-text {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: var(--text-muted);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        #btn-start { background-color: var(--primary-color); color: white; }
+        #btn-start:hover { background-color: #004494; }
+        #btn-pause { background-color: #ffc107; color: #333; }
+        #btn-pause:hover { background-color: #e0a800; }
+        #btn-reset { background-color: var(--text-muted); color: white; }
+        #btn-reset:hover { background-color: #5a6268; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 50vh; /* Adds padding at the bottom so the last items can scroll up */
+        }
+
+        .timeline-item {
+            background: var(--card-bg);
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+            scroll-margin-bottom: 40px; /* Keeps a little space below the item when scrolling to the bottom */
+        }
+
+        .timeline-content {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .task-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .task-name { font-weight: 600; font-size: 1.1rem; }
+        
+        .task-time-badge { 
+            color: var(--text-muted); 
+            font-weight: 500;
+            font-size: 0.95rem;
+            background: rgba(0,0,0,0.05);
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .task-percent {
+            font-weight: bold;
+            color: var(--primary-color);
+            min-width: 45px;
+            display: inline-block;
+        }
+
+        .task-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .btn-skip-item {
+            background: transparent;
+            border: 1px solid var(--text-muted);
+            color: var(--text-muted);
+            padding: 4px 12px;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-skip-item:hover {
+            background: var(--text-muted);
+            color: white;
+        }
+
+        .task-status { font-size: 1.2rem; min-width: 30px; text-align: right; }
+
+        .progress-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background-color: rgba(0, 86, 179, 0.1);
+            width: 0%;
+            z-index: 1;
+            transition: width 1s linear;
+        }
+
+        /* States */
+        .timeline-item.active {
+            border-left: 6px solid var(--primary-color);
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .timeline-item.completed .task-name,
+        .timeline-item.completed .task-time-badge { color: var(--text-muted); text-decoration: line-through; }
+        .timeline-item.completed .progress-bar { width: 100%; background-color: rgba(40, 167, 69, 0.1); }
+        .timeline-item.completed .task-percent { color: var(--success); }
+
+        .timeline-item.skipped { opacity: 0.7; }
+        .timeline-item.skipped .task-name,
+        .timeline-item.skipped .task-time-badge { color: var(--text-muted); text-decoration: line-through; }
+        .timeline-item.skipped .progress-bar { width: 100%; background-color: rgba(220, 53, 69, 0.05); }
+        .timeline-item.skipped .task-percent { color: var(--skip-color); }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div id="current-task">Ready to Start</div>
+        <div id="timer-display">00:00</div>
+        
+        <div class="overall-progress-wrapper">
+            <div class="overall-progress-container">
+                <div class="overall-progress-fill" id="overall-progress-bar"></div>
+            </div>
+            <div id="overall-percentage-text">Overall Progress: 0%</div>
+        </div>
+
+        <div class="controls">
+            <button id="btn-start" onclick="startTimer()">Start</button>
+            <button id="btn-pause" onclick="pauseTimer()" disabled>Pause</button>
+            <button id="btn-reset" onclick="resetTimer()">Reset All</button>
+        </div>
+    </div>
+
+    <div class="timeline" id="timeline">
+        </div>
+
+    <script>
+        const schedule = [
+            { name: "Explain", minutes: 15, skipped: false },
+            { name: "Practice", minutes: 5, skipped: false },
+            { name: "Check In", minutes: 5, skipped: false },
+            { name: "Explain", minutes: 15, skipped: false },
+            { name: "Practice", minutes: 5, skipped: false },
+            { name: "Check In", minutes: 5, skipped: false },
+            { name: "Break", minutes: 10, skipped: false },
+            { name: "Explain", minutes: 15, skipped: false },
+            { name: "Practice", minutes: 5, skipped: false },
+            { name: "Check In", minutes: 5, skipped: false },
+            { name: "Explain", minutes: 15, skipped: false },
+            { name: "Practice", minutes: 5, skipped: false },
+            { name: "Check In", minutes: 5, skipped: false },
+            { name: "Break", minutes: 10, skipped: false },
+            { name: "Explain", minutes: 15, skipped: false },
+            { name: "Practice", minutes: 5, skipped: false },
+            { name: "Check In", minutes: 5, skipped: false },
+            { name: "Explain", minutes: 15, skipped: false },
+            { name: "Practice", minutes: 5, skipped: false },
+            { name: "Check In", minutes: 5, skipped: false }
+        ];
+
+        let currentIndex = 0;
+        let timeRemaining = 0;
+        let timerInterval = null;
+        let isRunning = false;
+        let lastScrolledIndex = -1; 
+
+        function init() {
+            const timelineEl = document.getElementById('timeline');
+            timelineEl.innerHTML = ''; 
+            
+            schedule.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'timeline-item';
+                div.id = `item-${index}`;
+                div.innerHTML = `
+                    <div class="progress-bar" id="progress-${index}"></div>
+                    <div class="timeline-content">
+                        <div class="task-info">
+                            <span class="task-name">${index + 1}. ${item.name}</span>
+                            <span class="task-time-badge">
+                                ${item.minutes} Min 
+                                <span class="task-percent" id="percent-${index}">(0%)</span>
+                            </span>
+                        </div>
+                        <div class="task-actions">
+                            <button class="btn-skip-item" id="skip-btn-${index}" onclick="skipTimer(${index})">Skip</button>
+                            <span class="task-status" id="status-${index}"></span>
+                        </div>
+                    </div>
+                `;
+                timelineEl.appendChild(div);
+            });
+
+            resetTimer();
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function advanceToNext() {
+            currentIndex++;
+            
+            while (currentIndex < schedule.length && schedule[currentIndex].skipped) {
+                currentIndex++;
+            }
+
+            if (currentIndex < schedule.length) {
+                timeRemaining = schedule[currentIndex].minutes * 60;
+                updateUI();
+            } else {
+                pauseTimer();
+                updateUI(); 
+            }
+        }
+
+        function skipTimer(targetIndex) {
+            if (targetIndex < currentIndex) return; 
+            
+            schedule[targetIndex].skipped = true;
+
+            if (targetIndex === currentIndex) {
+                advanceToNext();
+            } else {
+                updateUI();
+            }
+        }
+
+        function calculateOverallProgress() {
+            let totalSeconds = 0;
+            let completedSeconds = 0;
+
+            schedule.forEach((item, index) => {
+                const itemSeconds = item.minutes * 60;
+                totalSeconds += itemSeconds;
+
+                // If an item is skipped, it counts as 100% completed towards the total progress
+                if (item.skipped) {
+                    completedSeconds += itemSeconds;
+                } else if (index < currentIndex) {
+                    completedSeconds += itemSeconds;
+                } else if (index === currentIndex) {
+                    completedSeconds += (itemSeconds - timeRemaining);
+                }
+            });
+
+            let overallPercent = (completedSeconds / totalSeconds) * 100;
+            // Cap it at 100% just in case
+            if (overallPercent > 100) overallPercent = 100;
+
+            document.getElementById('overall-progress-bar').style.width = `${overallPercent}%`;
+            document.getElementById('overall-percentage-text').textContent = `Overall Progress: ${Math.floor(overallPercent)}%`;
+        }
+
+        function updateUI() {
+            // Update Overall Progress
+            calculateOverallProgress();
+
+            if (currentIndex >= schedule.length) {
+                document.getElementById('current-task').textContent = "All Sessions Completed!";
+                document.getElementById('timer-display').textContent = "00:00";
+            } else {
+                const currentTask = schedule[currentIndex];
+                document.getElementById('current-task').textContent = `Current: ${currentIndex + 1}. ${currentTask.name} (${currentTask.minutes}m)`;
+                document.getElementById('timer-display').textContent = formatTime(timeRemaining);
+            }
+
+            schedule.forEach((item, index) => {
+                const element = document.getElementById(`item-${index}`);
+                const status = document.getElementById(`status-${index}`);
+                const progress = document.getElementById(`progress-${index}`);
+                const percentText = document.getElementById(`percent-${index}`);
+                const skipBtn = document.getElementById(`skip-btn-${index}`);
+
+                element.classList.remove('active', 'completed', 'skipped');
+
+                if (item.skipped) {
+                    element.classList.add('skipped');
+                    status.textContent = '⏭️';
+                    progress.style.width = '100%';
+                    percentText.textContent = '(Skipped)';
+                    skipBtn.style.display = 'none';
+                } 
+                else if (index < currentIndex) {
+                    element.classList.add('completed');
+                    status.textContent = '✅';
+                    progress.style.width = '100%';
+                    percentText.textContent = '(100%)';
+                    skipBtn.style.display = 'none';
+                } 
+                else if (index === currentIndex) {
+                    element.classList.add('active');
+                    status.textContent = '⏳';
+                    const totalSeconds = item.minutes * 60;
+                    const percentComplete = ((totalSeconds - timeRemaining) / totalSeconds) * 100;
+                    progress.style.width = `${percentComplete}%`;
+                    percentText.textContent = `(${Math.floor(percentComplete)}%)`;
+                    skipBtn.style.display = 'inline-block';
+
+                    // Auto-scroll logic: Scrolls the active item to the END (bottom) of the screen
+                    if (lastScrolledIndex !== currentIndex) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        lastScrolledIndex = currentIndex;
+                    }
+                } 
+                else {
+                    status.textContent = '';
+                    progress.style.width = '0%';
+                    percentText.textContent = '(0%)';
+                    skipBtn.style.display = 'inline-block';
+                }
+            });
+        }
+
+        function tick() {
+            if (timeRemaining > 0) {
+                timeRemaining--;
+                updateUI();
+            } else {
+                advanceToNext();
+            }
+        }
+
+        function startTimer() {
+            if (currentIndex >= schedule.length) return; 
+            
+            if (!isRunning) {
+                isRunning = true;
+                timerInterval = setInterval(tick, 1000);
+                document.getElementById('btn-start').disabled = true;
+                document.getElementById('btn-pause').disabled = false;
+            }
+        }
+
+        function pauseTimer() {
+            if (isRunning) {
+                isRunning = false;
+                clearInterval(timerInterval);
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-pause').disabled = true;
+            }
+        }
+
+        function resetTimer() {
+            pauseTimer();
+            currentIndex = 0;
+            lastScrolledIndex = -1; 
+            
+            schedule.forEach(item => item.skipped = false);
+            
+            timeRemaining = schedule[0].minutes * 60;
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            updateUI();
+        }
+
+        init();
+    </script>
+</body>
+</html>
